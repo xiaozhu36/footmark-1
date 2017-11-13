@@ -333,7 +333,7 @@ class VPCConnection(ACSQueryConnection):
 
         changed = False
         delay = 4
-        timeout = 20
+        timeout = 120
 
         params = {}
 
@@ -406,10 +406,8 @@ class VPCConnection(ACSQueryConnection):
         if nexthop_list:
             self.build_list_params(params, nexthop_list, 'NextHopList')
 
-        if self.get_status('CreateRouteEntry', params)\
-                and self.wait_for_route_entry_status(route_table_id, destination_cidrblock, 'Available', 4, 16):
-
-            return self.get_route_entry_attribute(route_table_id, destination_cidrblock)
+        if self.get_status('CreateRouteEntry', params):
+            return self.wait_for_route_entry_status(route_table_id, destination_cidrblock, 'Available', 4, 60)
 
         return None
 
@@ -558,48 +556,77 @@ class VPCConnection(ACSQueryConnection):
 
         return results
 
-    def allocate_eip_addresses(self, bandwidth, internet_charge_type):
+    def allocate_eip_address(self, bandwidth=5, internet_charge_type='PayByBandwidth', client_token=None):
         """
         method to query eip addresses in the region
-        :type bandwidth : str
-        :param bandwidth : bandwidth of the eip address
+        :type int
+        :param bandwidth : bandwidth of the eip address. Default to 5
         :type internet_charge_type : str
         :param internet_charge_type : paybytraffic or paybybandwidth types
         :return: Return the allocationId , requestId and EIP address
         """
         params = {}
-        results = {}
-        changed = False
-        if bandwidth:
-            self.build_list_params(params, bandwidth, 'Bandwidth')
-            
-        if internet_charge_type:
-            self.build_list_params(params, internet_charge_type, 'InternetChargeType')
+        self.build_list_params(params, str(bandwidth), 'Bandwidth')
+        self.build_list_params(params, internet_charge_type, 'InternetChargeType')
+        if client_token:
+            self.build_list_params(params, client_token, 'ClientToken')
                   
-        results = self.get_object('AllocateEipAddress', params, ResultSet)
-        eips = self.describe_eip_address(eip_address = results.eip_address, allocation_id = results.allocation_id)
-        changed = True
-        
-        return changed, eips.eip_addresses["eip_address"][0]
+        result = self.get_object('AllocateEipAddress', params, ResultSet)
+        if result:
+            return self.wait_for_eip_status(allocation_id=result.allocation_id, eip_address=result.eip_address,
+                                            status='Available', interval=3, timeout=60)
 
-    def bind_eip(self, allocation_id, instance_id):
+        return None
+
+    def get_all_eip_addresses(self, status=None, ip_address=None, allocation_id=None, associated_instance_type=None,
+                              associated_instance_id=None, page_number=1, page_size=50):
+        """
+        Get EIP details for a region
+        :param status: The EIP status includes Associating | Unassociating | InUse | Available
+        :param ip_address: The EIP ip address
+        :param allocation_id: ID of the allocated EIP
+        :param associated_instance_type: The type of the associate device
+        :param associated_instance_id: The ID of the associate device
+        :param pagenumber: Page number. The start value is 1. The default value is 1
+        :param pagesize: Sets the number of lines per page for queries per page. The maximum value is 50. Default to 50.
+        :return:
+        """
+        params = {}
+
+        if status:
+            self.build_list_params(params, status, 'Status')
+        if ip_address:
+            self.build_list_params(params, ip_address, 'EipAddress')
+        if allocation_id:
+            self.build_list_params(params, allocation_id, 'AllocationId')
+        if associated_instance_type:
+            self.build_list_params(params, associated_instance_type, 'AssociatedInstanceType')
+        if associated_instance_id:
+            self.build_list_params(params, associated_instance_id, 'AssociatedInstanceId')
+
+        self.build_list_params(params, page_number, 'PageNumber')
+        self.build_list_params(params, page_size, 'PageSize')
+
+        return self.get_list('DescribeEipAddresses', params, ['EipAddresses', Eip])
+
+    def associate_eip(self, allocation_id, instance_id):
         """
         :type allocation_id:string
         :param allocation_id:The instance ID of the EIP
         :type instance_id:string
         :param instance_id:The ID of an ECS instance
+        :param client_token: Used to ensure the idempotence of the request
         :return:Returns the status of operation
         """
         params = {}
-        result = False
-        
+
         self.build_list_params(params, allocation_id, 'AllocationId')
         self.build_list_params(params, instance_id, 'InstanceId')
        
-        self.get_object('AssociateEipAddress', params, ResultSet)
-        return self.wait_for_eip_status(allocation_id=allocation_id, status="InUse")    
+        self.get_status('AssociateEipAddress', params)
+        return self.wait_for_eip_status(allocation_id=allocation_id, status="InUse", interval=2, timeout=60) is None
 
-    def unbind_eip(self, allocation_id, instance_id):
+    def disassociate_eip(self, allocation_id, instance_id):
         """
         :type allocation_id:string
         :param allocation_id:The instance ID of the EIP
@@ -608,37 +635,48 @@ class VPCConnection(ACSQueryConnection):
         :return:Request Id
         """
         params = {}
-        result = False
-        if allocation_id:
-            self.build_list_params(params, allocation_id, 'AllocationId')
-        if instance_id:
-            self.build_list_params(params, instance_id, 'InstanceId')
-        results = self.get_object('UnassociateEipAddress', params, ResultSet)
-        if results.request_id:
-            result = self.wait_for_eip_status(allocation_id=allocation_id, status="Available")  
+        self.build_list_params(params, allocation_id, 'AllocationId')
+        self.build_list_params(params, instance_id, 'InstanceId')
+        self.get_status('UnassociateEipAddress', params)
 
-        return result
-        
-    def modifying_eip_attributes(self, allocation_id, bandwidth):
+        return self.wait_for_eip_status(allocation_id=allocation_id, status="Available", interval=2, timeout=60) is None
+
+    def modify_eip(self, allocation_id, bandwidth):
         """
         :type allocation_id:string
         :param allocation_id:The instance ID of the EIP
-        :type bandwidth:string
+        :type bandwidth:int
         :param bandwidth:Bandwidth of the EIP instance
         :return:Request Id
         """
         params = {}
-        results = []
-        changed = False
 
-        if allocation_id:
-            self.build_list_params(params, allocation_id, 'AllocationId')
-        if bandwidth:
-            self.build_list_params(params, bandwidth, 'Bandwidth')
-        results = self.get_status('ModifyEipAddressAttribute', params)
-        changed = True
-        
-        return changed, results
+        self.build_list_params(params, allocation_id, 'AllocationId')
+        if int(bandwidth) > 0:
+            self.build_list_params(params, int(bandwidth), 'Bandwidth')
+        return self.get_status('ModifyEipAddressAttribute', params)
+
+    def release_eip(self, allocation_id):
+        """
+        To release Elastic Ip
+        :type allocation_id: string
+        :param allocation_id: To release the allocation ID,allocation ID uniquely identifies the EIP
+        :return: Return status of operation
+        """
+        params = {}
+
+        self.build_list_params(params, allocation_id, 'AllocationId')
+        try_times = 10
+        while try_times > 0:
+            self.get_status('ReleaseEipAddress', params)
+            eips = self.get_all_eip_addresses(allocation_id=allocation_id)
+            if not eips or len(eips) < 1:
+                return True
+            time.sleep(3)
+            try_times -= 1
+
+        raise Exception("Retry 10 times to release EIP failed."
+                        "Please ensure EIP status is Available before releasing it.")
 
     def get_all_vrouters(self, vrouter_id=None, pagenumber=None, pagesize=None):
         """
@@ -673,37 +711,7 @@ class VPCConnection(ACSQueryConnection):
 
         return False, results
 
-    def releasing_eip(self, allocation_id):
-        """
-        To release Elastic Ip
-        :type allocation_id: string
-        :param allocation_id: To release the allocation ID,allocation ID uniquely identifies the EIP
-        :return: Return status of operation
-        """
-        params = {}
-        results = []
-        describe_eip = []
-        result = False
-
-        self.build_list_params(params, allocation_id, 'AllocationId')
-        results = self.get_object('ReleaseEipAddress', params, ResultSet)
-        if results.request_id:
-            result = True
-             
-        return result
-    
-    def wait_condition(self, delayTime, timeOut, condition):
-        tm = 0
-        assert(delayTime > 0)
-        assert(timeOut > delayTime)
-        while tm < timeOut:
-            if condition(tm):
-                return True
-            tm = tm + delayTime
-            time.sleep(delayTime)
-        return False        
-               
-    def wait_for_eip_status(self, eip_address = None, allocation_id=None, status = "", delayTime = 1, timeOut = 8):
+    def wait_for_eip_status(self, allocation_id, status, eip_address=None, interval=DefaultWaitForInterval, timeout=DefaultTimeOut):
         """
         wait for bind ok
         :param eip_address:
@@ -711,42 +719,21 @@ class VPCConnection(ACSQueryConnection):
         :param status:
         :return: 
         """
-        params = {}
-        result = False
-
-        if allocation_id:
-            self.build_list_params(params, allocation_id, 'AllocationId')
-        if eip_address:
-            self.build_list_params(params, eip_address, 'EipAddress')
-
-        condition = lambda s :status == self.get_object('DescribeEipAddresses', params, ResultSet).eip_addresses['eip_address'][0]['status']
-        result = self.wait_condition(delayTime, timeOut, condition)
-        return result
-
-    def describe_eip_address(self, eip_address=None, allocation_id=None, eip_status=None,
-                             page_number=1, page_size=10):
-        """
-        Get EIP details for a region
-        :param eip_address:
-        :param allocation_id:
-        :param eip_status:
-        :return:
-        """
-        params = {}
-        eip_details=None
-
-        if allocation_id:
-            self.build_list_params(params, allocation_id, 'AllocationId')
-        if eip_address:
-            self.build_list_params(params, eip_address, 'EipAddress')
-        if eip_status:
-            self.build_list_params(params, eip_status, 'Status')
-
-        self.build_list_params(params, page_number, 'PageNumber')
-        self.build_list_params(params, page_size, 'PageSize')
-        
-        return self.get_list('DescribeEipAddresses', params, ['eip', Eip])
-
+        try:
+            tm = 0
+            while tm < timeout:
+                eips = self.get_all_eip_addresses(allocation_id=allocation_id, ip_address=eip_address)
+                if not eips or len(eips) < 1:
+                    return None
+                if str.lower(status) == str.lower(eips[0].status):
+                    return eips[0]
+                tm += interval
+                if tm >= timeout:
+                    raise Exception("Timeout Error: Waiting For EIP Status {0}, time-consuming {1} seconds.".format(status, timeout))
+                time.sleep(interval)
+            return None
+        except Exception as e:
+            raise Exception("Waiting For EIP Status {0} Error: {1}.".format(status, e))
 
     def get_vswitch_status(self, vpc_id, zone_id=None, vswitch_id=None, pagenumber=None, pagesize=None):
         """
@@ -821,16 +808,18 @@ class VPCConnection(ACSQueryConnection):
 
     def wait_for_route_entry_status(self, route_table_id, destination_cidrblock, status, delay=DefaultWaitForInterval, timeout=DefaultTimeOut):
         try:
-            while True:
+            tm = 0
+            while tm < timeout:
                 route_entry = self.get_route_entry_attribute(route_table_id, destination_cidrblock)
-                if route_entry and str(route_entry.status) in [status, str(status).lower()]:
-                    return True
+                if route_entry and str.lower(route_entry.status) == str.lower(status):
+                    return route_entry
 
-                timeout -= delay
+                tm += delay
 
-                if timeout <= 0:
+                if tm >= timeout:
                     raise Exception("Timeout Error: Waiting for route entry status is %s, time-consuming %d seconds." % (status, timeout))
 
                 time.sleep(delay)
+            return None
         except Exception as e:
-            raise e
+            raise Exception("Waiting For route entry Status {0} Error: {1}.".format(status, e))

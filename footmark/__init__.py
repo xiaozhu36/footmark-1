@@ -5,7 +5,7 @@ import os
 
 from footmark.pyami.config import Config, FootmarkLoggingConfig, DefaultLoggingConfig
 
-__version__ = '1.1.14'
+__version__ = '1.1.16'
 Version = __version__  # for backware compatibility
 
 

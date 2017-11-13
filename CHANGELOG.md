@@ -1,5 +1,20 @@
 ## 1.2.0 (unreleased)
 
+## 1.1.16 (November 13, 2017)
+
+IMPROVEMENTS:
+
+  * foormark/vpc/connection: modify deleting vswitch timeout to 120 ([#51](https://github.com/alibaba/footmark/pull/51))
+
+## 1.1.15 (November 13, 2017)
+
+IMPROVEMENTS:
+
+  * foormark/ecs/instance: improve eip_address ([#51](https://github.com/alibaba/footmark/pull/51))
+  * foormark/vpc/connection: modify and improve eip methods ([#51](https://github.com/alibaba/footmark/pull/51))
+  * foormark/vpc/eip: modify and improve eip methods ([#51](https://github.com/alibaba/footmark/pull/51))
+  * foormark/vpc/config.py: modify default interval ([#51](https://github.com/alibaba/footmark/pull/51))
+
 ## 1.1.14 (November 6, 2017)
 
 IMPROVEMENTS:

@@ -33,8 +33,8 @@ class Instance(TaggedECSObject):
             return self.vpc_attributes['vswitch_id']
         if name == 'vpc_id':
             return self.vpc_attributes['vpc_id']
-        if name in ('eip', 'eip_address', 'elastic_ip_address'):
-            return self.eip_address['ip_address']
+        if name in ('eip', 'elastic_ip_address'):
+            return self.eip_address
         if name in ('group_id', 'security_group_id'):
             return self.security_group_id
         if name in ('group_name', 'security_group_name') and self.security_groups:
