@@ -1,5 +1,12 @@
 ## 1.2.0 (unreleased)
 
+## 1.1.17 (November 20, 2017)
+
+IMPROVEMENTS:
+
+  * foormark/vpc/connection: eip support to bind slb instnace ([#55](https://github.com/alibaba/footmark/pull/55))
+
+
 ## 1.1.16 (November 13, 2017)
 
 IMPROVEMENTS:

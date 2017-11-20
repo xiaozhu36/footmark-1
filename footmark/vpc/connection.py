@@ -622,6 +622,8 @@ class VPCConnection(ACSQueryConnection):
 
         self.build_list_params(params, allocation_id, 'AllocationId')
         self.build_list_params(params, instance_id, 'InstanceId')
+        if str(instance_id).startswith("lb-"):
+            self.build_list_params(params, 'SlbInstance', 'InstanceType')
        
         self.get_status('AssociateEipAddress', params)
         return self.wait_for_eip_status(allocation_id=allocation_id, status="InUse", interval=2, timeout=60) is None

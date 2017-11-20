@@ -11,6 +11,8 @@ import json
 import base64
 from footmark.ecs.config import *
 from footmark.connection import ACSQueryConnection
+from footmark.ecs.zone import Zone
+from footmark.ecs.instance_type import InstanceType, InstanceTypeFamily
 from footmark.ecs.regioninfo import RegionInfo
 from footmark.ecs.instance import Instance
 from footmark.ecs.securitygroup import SecurityGroup
@@ -312,6 +314,58 @@ class ECSConnection(ACSQueryConnection):
                 if self.delete_instance_retry('DeleteInstance', params, instance_id, delay=3, timeout=DefaultTimeOut):
                     result.append(instance_id)
         return result
+
+    def describe_instance_types(self, instance_type_family=None):
+        """
+        Retrieve all the instance types associated with your account.
+
+        :type instance_type_family: str
+        :param instance_type_family: Family name of instance type
+
+        :rtype: list
+        :return: A list of  :class:`footmark.ecs.instance_type`
+
+        """
+        params = {}
+
+        if instance_type_family:
+            self.build_list_params(params, instance_type_family, 'InstanceTypeFamily')
+        return self.get_list('DescribeInstanceTypes', params, ['InstanceTypes', InstanceType])
+
+    def describe_zones(self, zone_id=None):
+        """
+            Retrieve all zones in the region.
+
+            :type zone_id: str
+            :param zone_id: Filter the zone which id is equal to zone_id
+
+            :rtype: list
+            :return: A list of  :class:`footmark.ecs.zone`
+
+        """
+        params = {}
+        self.build_list_params(params, self.region, 'RegionId')
+        zones = self.get_list('DescribeZones', params, ['Zones', Zone])
+        if zone_id:
+            zones = [zone for zone in zones if zone.id == zone_id]
+        return zones
+
+    def describe_instance_type_families(self, generation=None):
+        """
+            Retrieve all the instance type families associated with your account.
+
+            :type generation: str
+            :param generation: Filter the families by generation
+
+            :rtype: list
+            :return: A list of  :class:`footmark.ecs.instance_type_family`
+
+        """
+        params = {}
+        self.build_list_params(params, self.region, 'RegionId')
+        if generation:
+            self.build_list_params(params, generation, "Generation")
+        return self.get_list('DescribeInstanceTypeFamilies', params, ['InstanceTypeFamilies', InstanceTypeFamily])
 
     def get_all_volumes(self, zone_id=None, volume_ids=None, volume_name=None, filters=None):
         """
