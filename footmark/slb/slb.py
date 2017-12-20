@@ -94,7 +94,7 @@ class LoadBalancerListener(TaggedSLBObject):
     def set_attribute(self, load_balancer_id='',\
                             bandwidth=None,\
                             sticky_session='',\
-                            listener_type='',\
+                            protocol='',\
                             health_check='',\
                             scheduler='',\
                             sticky_session_type='',\
@@ -126,7 +126,7 @@ class LoadBalancerListener(TaggedSLBObject):
                                     listener_port=self.listener_port,\
                                     bandwidth=bandwidth,\
                                     sticky_session=sticky_session,\
-                                    listener_type=listener_type,\
+                                    protocol=protocol,\
                                     health_check=health_check,\
                                     scheduler=scheduler,\
                                     sticky_session_type=sticky_session_type,\

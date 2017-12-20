@@ -1,5 +1,12 @@
 ## 1.2.0 (unreleased)
 
+## 1.1.18 (December 20, 2017)
+
+BUG FIXES:
+
+  * foormark/slb/connection: fix slb listener not found ([#57](https://github.com/alibaba/footmark/pull/57))
+
+
 ## 1.1.17 (November 20, 2017)
 
 IMPROVEMENTS:

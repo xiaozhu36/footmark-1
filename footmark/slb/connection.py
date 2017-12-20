@@ -241,7 +241,8 @@ class SLBConnection(ACSQueryConnection):
             self.build_list_params(params, bandwidth, 'Bandwidth')
         if client_token:
             self.build_list_params(params, client_token, 'ClientToken')
-        return self.get_object('CreateLoadBalancer', params, LoadBalancer)
+        slb = self.get_object('CreateLoadBalancer', params, LoadBalancer)
+        return self.describe_load_balancer_attribute(slb.id)
 
     def add_listeners(self, load_balancer_id, purge_listener=None, listeners=None):
         """
@@ -328,7 +329,7 @@ class SLBConnection(ACSQueryConnection):
         return changed, results
 
     def create_load_balancer_listener(self, load_balancer_id,\
-                                            listener_type,\
+                                            protocol,\
                                             listener_port,\
                                             backend_server_port,\
                                             bandwidth=None,\
@@ -367,8 +368,8 @@ class SLBConnection(ACSQueryConnection):
         :param bandwidth: Listener bandwidth. Value: -1 / 1-1000 Mbps
         :type sticky_session: string
         :param sticky_session: Whether to open the Gzip compression
-        :type listener_type: string
-        :param listener_type: type of listener to create
+        :type protocol: string
+        :param protocol: type of listener to create
         :type health_check: string
         :param health_check: Whether to enable health check
         :type health_check: string
@@ -423,7 +424,7 @@ class SLBConnection(ACSQueryConnection):
                                  https= "CreateLoadBalancerHTTPSListener",\
                                  tcp="CreateLoadBalancerTCPListener",\
                                  udp="CreateLoadBalancerUDPListener")
-        key = listener_type_dic.get(listener_type, '')
+        key = listener_type_dic.get(protocol, '')
 
         self.build_list_params(params, load_balancer_id, 'LoadBalancerId')
         self.build_list_params(params, listener_port, 'ListenerPort')
@@ -475,7 +476,9 @@ class SLBConnection(ACSQueryConnection):
         if ca_certificate_id:
             self.build_list_params(params, ca_certificate_id, 'CACertificateId')
 
-        return  self.get_status(key, params)
+        if self.get_status(key, params):
+            return self.start_load_balancer_listener(load_balancer_id, listener_port)
+        return False
 
     def set_listener_access_control_status(self, load_balancer_id, listener_port, access_control_status):
         """
@@ -498,7 +501,7 @@ class SLBConnection(ACSQueryConnection):
     def set_listener_attribute(self, load_balancer_id,\
                                     listener_port,\
                                     bandwidth,\
-                                    listener_type,\
+                                    protocol,\
                                     sticky_session='',\
                                     health_check='',\
                                     scheduler='',\
@@ -535,8 +538,8 @@ class SLBConnection(ACSQueryConnection):
         :param bandwidth: Listener bandwidth. Value: -1 / 1-1000 Mbps
         :type sticky_session: string
         :param sticky_session: Whether to open the Gzip compression
-        :type listener_type: string
-        :param listener_type: type of listener to create
+        :type protocol: string
+        :param protocol: type of listener to create
         :type health_check: string
         :param health_check: Whether to enable health check
         :type: scheduler: string
@@ -594,7 +597,7 @@ class SLBConnection(ACSQueryConnection):
                                  https= "SetLoadBalancerHTTPSListenerAttribute",\
                                  tcp="SetLoadBalancerTCPListenerAttribute",\
                                  udp="SetLoadBalancerUDPListenerAttribute")
-        key = listener_type_dic.get(listener_type, '')
+        key = listener_type_dic.get(protocol, '')
 
         self.build_list_params(params, load_balancer_id, 'LoadBalancerId')
         self.build_list_params(params, listener_port, 'ListenerPort')
@@ -737,7 +740,7 @@ class SLBConnection(ACSQueryConnection):
 
         return self.get_status('RemoveListenerWhiteListItem', params)
 
-    def describe_load_balancer_listener_attribute(self, load_balancer_id, listener_port, listener_type):
+    def describe_load_balancer_listener_attribute(self, load_balancer_id, listener_port, protocol):
         """
         describe load balancer listener attribute
         :type load_balancer_id: string
@@ -746,17 +749,24 @@ class SLBConnection(ACSQueryConnection):
         :param listener_port: Load balancer instance  frontend port. Value: 1-65535
         :return: obj: object of listener
         """
+        action = "DescribeLoadBalancer"
+        if protocol is None or len(str(protocol))<=0:
+            lb = self.describe_load_balancer_attribute(load_balancer_id)
+            if lb is None:
+                return None
+            for pp in lb.listener_ports_and_protocol.get("listener_port_and_protocol"):
+                if pp.get("listener_port") == listener_port:
+                    protocol = pp.get("listener_protocol")
+                    break
+
+        action += str.upper(protocol) + "ListenerAttribute"
+
         params = {}
-        obj = None
-        listener_type_dic = dict(http="DescribeLoadBalancerHTTPListenerAttribute",\
-                                 https="DescribeLoadBalancerHTTPSListenerAttribute",\
-                                 tcp="DescribeLoadBalancerTCPListenerAttribute",\
-                                 udp="DescribeLoadBalancerUDPListenerAttribute")
-        key = listener_type_dic.get(listener_type, '')
+
         self.build_list_params(params, load_balancer_id, 'LoadBalancerId')
         self.build_list_params(params, listener_port, 'ListenerPort')
         try:
-            obj = self.get_object(key, params, LoadBalancerListener)
+            obj = self.get_object(action, params, LoadBalancerListener)
         except Exception as e:
             obj = None
         return obj
@@ -964,7 +974,7 @@ class SLBConnection(ACSQueryConnection):
         :param load_balancer_id: The unique ID of an Server Load Balancer instance
         :type internet_charge_type: str
         :param internet_charge_type: Charging mode for the public network instance
-        :type bandwidth: str
+        :type bandwidth: int
         :param bandwidth: Bandwidth peak of the public network instance charged per fixed bandwidth
         :return: returns the request_id of request
         """
