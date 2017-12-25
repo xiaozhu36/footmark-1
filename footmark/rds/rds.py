@@ -1,5 +1,30 @@
 from footmark.rds.rdsobject import TaggedRDSObject
 
+class DbInstance(TaggedRDSObject):
+    def __init__(self, connection=None):
+        super(DbInstance, self).__init__(connection)
+
+    def __repr__(self):
+        return 'DbInstance:%s' % self.id
+
+    def __getattr__(self, name):
+        if name == 'id':
+             return self.id
+        if name == 'status':
+             return self.dbinstance_status
+        if name == 'type':
+             return self.dbinstance_type
+
+    def __setattr__(self, name, value):
+        if name == 'id':
+             self.dbinstance_id=value
+        if name == 'status':
+             self.dbinstance_status=value
+        if name == 'type':
+             self.dbinstance_type=value
+        super(TaggedRDSObject, self).__setattr__(name, value)
+
+
 class Account(TaggedRDSObject):
     def __init__(self, connection=None, owner_id=None,
                  name=None, description=None, id=None):

@@ -47,7 +47,7 @@ class SLBConnection(ACSQueryConnection):
 
         return self.get_object('DescribeVServerGroupAttribute', params, VServerGroup)
     
-    def describe_vserver_groups(self, load_balancer_id):
+    def  describe_vserver_groups(self, load_balancer_id):
         """
         describe vserver group
         :type vserver_group_id: string
@@ -200,7 +200,7 @@ class SLBConnection(ACSQueryConnection):
         
         return self.get_status('DeleteVServerGroup', params)    
 
-    def create_load_balancer(self, load_balancer_name=None, address_type=None, vswitch_id=None, client_token=None,
+    def create_load_balancer(self, load_balancer_name=None, address_type=None, vswitch_id=None,
                              internet_charge_type=None, master_zone_id=None, slave_zone_id=None, bandwidth=None):
         """
         Creates a Server Load Balancer
@@ -1010,8 +1010,8 @@ class SLBConnection(ACSQueryConnection):
         Describe Load Balancers
         :type load_balancer_id: string
         :param load_balancer_id: id of the load balancer
-        :type Load_balancer_name: string
-        :param Load_balancer_name: name of the load balancer
+        :type load_balancer_name: string
+        :param load_balancer_name: name of the load balancer
         :return: load balance in dictionary format if found else None
         """
 

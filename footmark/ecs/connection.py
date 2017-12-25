@@ -9,12 +9,14 @@ import six
 import time
 import json
 import base64
+import logging
 from footmark.ecs.config import *
 from footmark.connection import ACSQueryConnection
 from footmark.ecs.zone import Zone
 from footmark.ecs.instance_type import InstanceType, InstanceTypeFamily
 from footmark.ecs.regioninfo import RegionInfo
 from footmark.ecs.instance import Instance
+from footmark.ecs.image import Image
 from footmark.ecs.securitygroup import SecurityGroup
 from footmark.ecs.volume import Disk
 from footmark.exception import ECSResponseError
@@ -1042,7 +1044,7 @@ class ECSConnection(ACSQueryConnection):
 
         return self.get_object('DescribeSecurityGroupAttribute', params, SecurityGroup)
 
-    def get_all_security_groups(self, group_ids=None, vpc_id=None, filters=None):
+    def get_all_security_groups(self, group_ids=None, vpc_id=None, filters=None, name=None):
         """
         Get all security groups associated with your account in a region.
     
@@ -1052,6 +1054,9 @@ class ECSConnection(ACSQueryConnection):
                           
         :type vpc_id: string
         :param vpc_id: ID of vpc which security groups belong.
+        		
+        :type name: string
+        :param name: Name of the security group.
     
         :type filters: dict
         :param filters: Optional filters that can be used to limit
@@ -1072,6 +1077,8 @@ class ECSConnection(ACSQueryConnection):
             self.build_list_params(params, group_ids, 'SecurityGroupIds')
         if vpc_id:
             self.build_list_params(params, vpc_id, 'VpcId')
+        if name:
+            self.build_list_params(params, name, 'SecurityGroupName')
         if filters:
             self.build_filter_params(params, filters)
         results = self.get_list('DescribeSecurityGroups', params, ['SecurityGroups', SecurityGroup])
@@ -1375,8 +1382,8 @@ class ECSConnection(ACSQueryConnection):
         return self.get_status('ModifyDiskAttribute', params)
 
     def create_image(self, snapshot_id=None, image_name=None, image_version=None, description=None,
-                     images_tags=None, instance_id=None, disk_mapping=None, launch_permission=None,
-                     wait=None, wait_timeout=None):
+                     instance_id=None, disk_mapping=None, client_token=None, wait=None,
+                     wait_timeout=None):
         """
         Create a user-defined image with snapshots of system disks.
         The created image can be used to create a new ECS instance.
@@ -1393,17 +1400,14 @@ class ECSConnection(ACSQueryConnection):
         :type description: string
         :param description: description of the image
 
-        :type images_tags: list
-        :param images_tags: tags for image
-
         :type instance_id: string
         :param instance_id: the specified instance_id
 
         :type disk_mapping: list
         :param disk_mapping: An optional list of device hashes/dictionaries with custom configurations
-
-        :type launch_permission: list
-        :param launch_permission: An optional list of userIds who are permitted to launch ami
+      
+        :type client_token: string
+        :param client_token: An optional list of device hashes/dictionaries with custom configurations
 
         :type wait: string
         :param wait: An optional bool value indicating wait for instance to be running before running
@@ -1448,6 +1452,10 @@ class ECSConnection(ACSQueryConnection):
         if description:
             self.build_list_params(params, description, 'Description')
 
+        # set the client token
+        if client_token:
+            self.build_list_params(params, client_token, 'ClientToken')
+
         # specify the instance id
         if instance_id:
             self.build_list_params(params, instance_id, 'InstanceId')
@@ -1457,9 +1465,6 @@ class ECSConnection(ACSQueryConnection):
             mapping_no = 1
             for mapping in disk_mapping:
                 if mapping:
-                    if 'device' in mapping:
-                        self.build_list_params(params, mapping[
-                            'device'], 'DiskDeviceMapping.' + str(mapping_no) + '.Device')
                     if 'disk_size' in mapping:
                         self.build_list_params(params, mapping[
                             'disk_size'], 'DiskDeviceMapping.' + str(mapping_no) + '.Size')
@@ -1480,46 +1485,21 @@ class ECSConnection(ACSQueryConnection):
 
                     mapping_no += 1
 
-        # set the instance tags, maximum 5 tags
-        tag_no = 1
-        if images_tags:
-            for instance_tag in images_tags:
-                if instance_tag and tag_no < 6:
-                    if 'tag_key' in instance_tag:
-                        self.build_list_params(params, instance_tag[
-                            'tag_key'], 'Tag' + str(tag_no) + 'Key')
-                    if 'tag_value' in instance_tag:
-                        self.build_list_params(params, instance_tag[
-                            'tag_value'], 'Tag' + str(tag_no) + 'Value')
-                    tag_no += 1
-
         try:
-            response = self.get_status('CreateImage', params)
+            response = self.get_object('CreateImage', params, ResultSet)
 
             if response:
-                image_id = response['ImageId']
-                request_id = response['RequestId']
-
-            image_sharing_results = []
-            if launch_permission and image_id:
-                sharing_changed, image_sharing_results = self.set_launch_perms(launch_permission, image_id)
+                image_id = response.image_id
+                request_id = response.request_id
 
             if wait:
-                if wait.lower() in ['yes', 'true']:
-                    if not wait_timeout:
-                        wait_timeout = 300
-                    time.sleep(wait_timeout)
+                if not wait_timeout:
+                    wait_timeout = 300
+                time.sleep(wait_timeout)
 
             results.append("Image creation successful")
-
             changed = True
-
-            if image_sharing_results:
-                if 'error code' in str(image_sharing_results).lower():
-                    results.append(image_sharing_results)
-                    changed = False
-                else:
-                    results.append(image_sharing_results)
+         
         except ServerException as e:
             results.append({"Error Code": e.error_code, "Error Message": e.message,
                             "RequestId": e.request_id, "Http Status": e.http_status})
@@ -1527,54 +1507,6 @@ class ECSConnection(ACSQueryConnection):
             results.append({"Error:": e})
 
         return changed, image_id, results, request_id
-
-    def set_launch_perms(self, launch_permission, image_id, operation_flag=True):
-        """
-        To set launch permissions
-        i.e user accounts which have rights on image
-
-        :type launch_permission: list
-        :param launch_permission: list of userids, max 10 permitted at a time
-
-        :type: image_id: string
-        :param image_id: imageid to which to add user rights
-
-        :type: operation_flag: bool
-        :param operation_flag: True : add acount, False: remove account
-
-        :return:
-        """
-        params = {}
-        results = []
-        changed = False
-
-        if not image_id:
-            results.append({"Error Code": "image_id is mandatory", "Error Message": "image_id is mandatory"})
-            return None
-
-        self.build_list_params(params, image_id, 'ImageId')
-        if launch_permission:
-            user_account_list = launch_permission
-            if user_account_list:
-                user_no = 1
-                for account in range(0, len(user_account_list)):
-                    self.build_list_params(params, user_account_list[account
-                    ], 'AddAccount.' + str(user_no))
-                    user_no += 1
-                    if user_no == 11:
-                        break
-        try:
-            response = self.get_status('ModifyImageSharePermission', params)
-            changed = True
-            results.append("launch permissions set successfully")
-        except Exception as ex:
-            error_code = ex.error_code
-            error_msg = ex.message
-            results.append("launch permissions not set successfully")
-            results.append({"Error Code": error_code, "Error Message": error_msg})
-            changed = False
-
-        return changed, results
 
     def delete_image(self, image_id):
         """
@@ -1590,13 +1522,13 @@ class ECSConnection(ACSQueryConnection):
         self.build_list_params(params, image_id, 'ImageId')
 
         try:
-            response = self.get_status('DescribeImages', params)
-            if len(response) > 0:
+            response = self.get_object('DescribeImages', params, ResultSet)
+            if response:
                 json_obj = response
-                total_instance = json_obj['TotalCount']
+                total_instance = response.total_count
                 if total_instance > 0:
-                    for items in json_obj['Images']['Image']:
-                        if image_id == items['ImageId']:
+                    for items in response.images['image']:
+                        if image_id == items['image_id']:
                             response = self.get_status('DeleteImage', params)
                             results.append(response)
                             changed = True
@@ -1610,7 +1542,64 @@ class ECSConnection(ACSQueryConnection):
             results.append({"Error:": e})
             changed = False
 
-        return changed, results
+        return changed
+
+    def get_all_images(self, image_id=None, image_name=None, 
+                           snapshot_id=None, filters=None):
+            """
+            Get all Volumes associated with the current credentials.
+
+            :type image_id: dict
+            :param image_id: Optional  image id.  If this is present,
+                             only the image associated with these
+                             image id will be returned.
+        
+            :type image_name: dict
+            :param image_name: Optional image name.  If this is present,
+                               only the image associated with these 
+                               image name will be returned.
+
+            :type snapshot_id: list
+            :param snapshot_id: Optional snapshot id.  If this list is
+                                present, only the image associated with
+                                these snapshot id will be returned.
+
+            :type filters: dict
+            :param filters: Optional filters that can be used to limit
+                            the results returned.  Filters are provided
+                            in the form of a dictionary consisting of
+                            filter names as the key and filter values
+                            as the value.  The set of allowable filter
+                            names/values is dependent on the request
+                            being performed.  Check the ECS API guide
+                            for details.
+
+            :rtype: list of Volume
+            :return: The requested Volume objects
+            """
+            params = {}
+            result = []
+            changed = False
+            if image_id:
+                self.build_list_params(params, image_id, 'ImageId')
+            if image_name:
+                self.build_list_params(params, image_name, 'ImageName')
+            if snapshot_id:
+                self.build_list_params(params, snapshot_id, 'SnapshotId')
+            if filters:
+                self.build_filter_params(params, filters)
+            result = self.get_list('DescribeImages', params, ['Images', Image])
+            if result:
+                changed = True;
+            else:
+                while changed == False:
+                    time.sleep(20);
+                    result = self.get_list('DescribeImages', params, ['Images', Image])
+                    if result:
+                        changed = True;
+                        break                
+                    
+            return result;
 
     def get_snapshot_image(self, snapshot_id):
         params = {}
@@ -1624,11 +1613,11 @@ class ECSConnection(ACSQueryConnection):
 
                 if counter > 20:
                     break
-                obtained_results = self.get_status('DescribeSnapshots', params)
+                obtained_results = self.get_object('DescribeSnapshots', params, ResultSet)
                 counter += 1
-                if obtained_results and len(obtained_results['Snapshots']['Snapshot']) > 0:
-                    status = obtained_results['Snapshots']['Snapshot'][0]['Status']
-                    progress = obtained_results['Snapshots']['Snapshot'][0]['Progress']
+                if obtained_results and len(obtained_results.snapshots[u'snapshot']) > 0:
+                    status = str(obtained_results.snapshots[u'snapshot'][0][u'status'])
+                    progress = str(obtained_results.snapshots[u'snapshot'][0][u'progress'])
 
                     if not '100%' in progress:
                         time.sleep(60)

@@ -11,7 +11,7 @@ import json
 
 from footmark.connection import ACSQueryConnection
 from footmark.rds.regioninfo import RegionInfo
-from footmark.rds.rds import Account
+from footmark.rds.rds import Account, DbInstance
 from footmark.resultset import ResultSet
 from footmark.exception import RDSResponseError
 
@@ -1374,4 +1374,45 @@ class RDSConnection(ACSQueryConnection):
             results.append(custom_msg[2] + error_code +
                            " and message: " + error_msg)
         return results
+
+
+    def get_rds_instances(self, instance_id=None, engine=None, dbinstance_type=None, instance_network_type=None,
+                          connection_mode=None, tags=None):
+        """
+        Get RDS Instance Info
+
+        :type instance_id: string
+        :param instance_id: Id of instance
+        :type engine: string
+        :param engine: Type of the database
+        :type dbinstance_type: string
+        :param dbinstance_type: Instance type
+        :type instance_network_type: string
+        :param instance_network_type: Instance Network type
+        :type connection_mode: string
+        :param connection_mode: Instance connection mode
+        :type db_tags: dict
+        :param db_tags: Database tags
+        :return:
+            result: detailed server response
+        """
+        db_tags_json = []
+        params = {}
+        if instance_id:
+            self.build_list_params(params, instance_id, 'DBInstanceId')
+        if engine:
+            self.build_list_params(params, engine, 'Engine')
+        if dbinstance_type:
+            self.build_list_params(params, dbinstance_type, 'DBInstanceType')
+        if instance_network_type:
+            self.build_list_params(params, instance_network_type, 'InstanceNetworkType')
+        if connection_mode:
+            self.build_list_params(params, connection_mode, 'ConnectionMode')
+        if tags:
+            db_tags_json = json.dumps(tags)
+        if db_tags_json:
+            self.build_list_params(params, db_tags_json, 'Tags')
+        return self.get_list('DescribeDBInstances', params, ['Items', DbInstance])
+
+
 
