@@ -70,12 +70,13 @@ setup(
     ],
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
-    packages=["footmark", "footmark.ecs", "footmark.slb", "footmark.vpc", "footmark.rds", "footmark.oss", "footmark.pyami"],
+    packages=["footmark", "footmark.ecs", "footmark.slb", "footmark.vpc", "footmark.rds", "footmark.ess",
+              "footmark.oss", "footmark.pyami"],
 
     # List run-time dependencies here.  These will be installed by pip when
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=['aliyun-python-sdk-ecs>=2.1.0', 'aliyun-python-sdk-slb>=2.0.21', 'aliyun-python-sdk-core>=2.3.2',
-                      'aliyun-python-sdk-rds>=2.1.0', 'oss2>=2.3.3', 'importlib']
+                      'aliyun-python-sdk-rds>=2.1.0', 'aliyun-python-sdk-ess>=2.1.3', 'oss2>=2.3.3', 'importlib']
 )

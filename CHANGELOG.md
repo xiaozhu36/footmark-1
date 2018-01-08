@@ -1,4 +1,11 @@
-## 1.2.0 (unreleased)
+## 1.3.0 (unreleased)
+
+## 1.2.1 (January 8, 2018)
+
+IMPROVEMENTS:
+
+  * **New Module:** foormark/ess ([#59](https://github.com/alibaba/footmark/pull/59))
+
 
 ## 1.1.18 (December 20, 2017)
 

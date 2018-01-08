@@ -118,7 +118,9 @@ class ACSQueryConnection(ACSAuthConnection):
         return None
 
     def build_list_params(self, params, items, label):
-        params['set_%s' % label] = str(items).strip()
+        if isinstance(items, str):
+            items = str(items).strip()
+        params['set_%s' % label] = items
 
     def parse_response(self, markers, body, connection):
         results = []

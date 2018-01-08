@@ -200,7 +200,7 @@ class SLBConnection(ACSQueryConnection):
         
         return self.get_status('DeleteVServerGroup', params)    
 
-    def create_load_balancer(self, load_balancer_name=None, address_type=None, vswitch_id=None,
+    def create_load_balancer(self, load_balancer_name=None, address_type=None, vswitch_id=None, client_token=None,
                              internet_charge_type=None, master_zone_id=None, slave_zone_id=None, bandwidth=None):
         """
         Creates a Server Load Balancer
