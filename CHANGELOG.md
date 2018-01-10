@@ -1,10 +1,20 @@
-## 1.3.0 (unreleased)
+## 1.5.0 (unreleased)
+
+## 1.3.0 (January 8, 2018)
+
+IMPROVEMENTS:
+
+  * **New Module:** foormark/ess/rule ([#60](https://github.com/alibaba/footmark/pull/60))
+  * **New Module:** foormark/ess/task ([#60](https://github.com/alibaba/footmark/pull/60))
+
 
 ## 1.2.1 (January 8, 2018)
 
 IMPROVEMENTS:
 
-  * **New Module:** foormark/ess ([#59](https://github.com/alibaba/footmark/pull/59))
+  * **New Module:** foormark/ess/group ([#59](https://github.com/alibaba/footmark/pull/59))
+  * **New Module:** foormark/ess/configuration ([#59](https://github.com/alibaba/footmark/pull/59))
+  * **New Module:** foormark/ess/instance ([#59](https://github.com/alibaba/footmark/pull/59))
 
 
 ## 1.1.18 (December 20, 2017)

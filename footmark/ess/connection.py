@@ -12,10 +12,12 @@ from footmark.ess.config import *
 from footmark.connection import ACSQueryConnection
 from footmark.exception import ECSResponseError
 from footmark.resultset import ResultSet
-from footmark.ess.configuration import Configuration
-from footmark.ess.group import Group
-from footmark.ess.instance import Instance
-# from aliyunsdkess.request.v20140828.DescribeScalingInstancesRequest import
+from footmark.ess.configuration import ScalingConfiguration
+from footmark.ess.group import ScalingGroup
+from footmark.ess.instance import ScalingInstance
+from footmark.ess.rule import ScalingRule
+from footmark.ess.scheduled_task import ScheduledTask
+# from aliyunsdkess.request.v20140828.DescribeScalingRulesRequest import
 
 
 class ESSConnection(ACSQueryConnection):
@@ -229,7 +231,7 @@ class ESSConnection(ACSQueryConnection):
             pNum = 1
         while True:
             self.build_list_params(params, pNum, 'PageNumber')
-            cfg_list = self.get_list('DescribeScalingConfigurations', params, ['ScalingConfigurations', Configuration])
+            cfg_list = self.get_list('DescribeScalingConfigurations', params, ['ScalingConfigurations', ScalingConfiguration])
 
             for cfg in cfg_list:
                 cfgs.append(cfg)
@@ -372,7 +374,7 @@ class ESSConnection(ACSQueryConnection):
             pNum = 1
         while True:
             self.build_list_params(params, pNum, 'PageNumber')
-            cfg_list = self.get_list('DescribeScalingGroups', params, ['ScalingGroups', Group])
+            cfg_list = self.get_list('DescribeScalingGroups', params, ['ScalingGroups', ScalingGroup])
             for cfg in cfg_list:
                 cfgs.append(cfg)
             if pagenumber or len(cfg_list) < pagesize:
@@ -680,7 +682,7 @@ class ESSConnection(ACSQueryConnection):
             pNum = 1
         while True:
             self.build_list_params(params, pNum, 'PageNumber')
-            cfg_list = self.get_list('DescribeScalingInstances', params, ['ScalingInstances', Instance])
+            cfg_list = self.get_list('DescribeScalingInstances', params, ['ScalingInstances', ScalingInstance])
             for cfg in cfg_list:
                 instances.append(cfg)
             if pagenumber or len(cfg_list) < pagesize:
@@ -688,6 +690,418 @@ class ESSConnection(ACSQueryConnection):
             pNum += 1
 
         return instances
+
+    def create_rule(self, scaling_group_id, adjustment_type, adjustment_value, name=None, cooldown=None):
+        """
+        A scaling rule defines specific scaling actions, for example, adding or removing n ECS instances.
+
+        If the execution of a scaling rule results in a number of ECS instances in the scaling group that is less than the MinSize or greater than the MaxSize,
+        Auto Scaling automatically adjusts the number of ECS instances to be added or removed by executing the “Adjust scaling group instance quantity to MinSize” 
+        or “Adjust scaling group instance quantity to MaxSize” rule.
+
+        Example 1: If a scaling group has a MaxSize of 3, the current number of instances (Total Capacity) is 2, 
+                   and a scaling rule instructs the system to “add 3 ECS instances”, this operation actually only adds one ECS instance.
+                  (The values in the scaling rule are not changed.)
+        Example 2: If a scaling group has a MinSize of 2, the current number of instances (Total Capacity) is 3,
+                   and a scaling rule instructs the system to “remove 5 ECS instances”, this operation actually only removes one ECS instance.
+                   (The values in the scaling rule are not changed.)
+
+        :type str
+        :param scaling_group_id: ID of the scaling group of a scaling rule.
+        :type str
+        :param adjustment_type: Adjustment mode of a scaling rule. Optional values:
+            - QuantityChangeInCapacity: It is used to increase or decrease a specified number of ECS instances.
+            - PercentChangeInCapacity: It is used to increase or decrease a specified proportion of ECS instances.
+            - TotalCapacity: It is used to adjust the quantity of ECS instances in the current scaling group to a specified value.
+        :type int
+        :param adjustment_value: Adjusted value of a scaling rule. Value range:
+            - QuantityChangeInCapacity: (0, 100] U (-100, 0]
+            - PercentChangeInCapacity: [0, 10000] U [-10000, 0]
+            - TotalCapacity: [0, 100]
+        :type str
+        :param name: Name shown for the scaling rule, which is a string containing 2 to 40 English or Chinese characters.
+                It must begin with a number, a letter (case-insensitive) or a Chinese character and can contain numbers, “_”, “-“ or “.”.
+                The account name in the same scaling group is unique in the same region.
+                If this parameter value is not specified, the default value is ScalingRuleId.
+        :type int
+        :param cooldown: Cool-down time of a scaling rule. Value range: [0, 86,400], in seconds. The default value is empty.
+        
+        :rtype: object
+        :return: Returns a <footmark.ess.Rule> object.
+
+        """
+
+        params = {}
+
+        self.build_list_params(params, scaling_group_id, 'ScalingGroupId')
+        self.build_list_params(params, adjustment_type, 'AdjustmentType')
+        self.build_list_params(params, adjustment_value, 'AdjustmentValue')
+
+        if name:
+            self.build_list_params(params, name, 'ScalingRuleName')
+        if cooldown is not None:
+            self.build_list_params(params, cooldown, 'Cooldown')
+
+        result = self.get_object('CreateScalingRule', params, ResultSet)
+        return self.describe_rules(scaling_group_id=scaling_group_id, scaling_rule_ids=[result.scaling_rule_id])[0]
+
+    def describe_rules(self, scaling_group_id=None, scaling_rule_ids=None, scaling_rule_names=None, scaling_rule_aris=None,
+                       pagenumber=None, pagesize=50):
+        """
+        Queries information of a scaling rule. You can query all scaling rules in a scaling group by specifying the scaling group ID.
+        
+        :type str
+        :param scaling_group_id: ID of the scaling group of a scaling configuration.
+        :type list
+        :param scaling_rule_ids: List ID of a scaling configurations. A maximum of 10 values can be entered.
+        :type list
+        :param scaling_rule_names: List name of a scaling configurations. A maximum of 10 values can be entered.
+        :type list
+        :param scaling_rule_aris: Unique identifier of a scaling rule. A maximum of 10 values can be entered.
+        :type int
+        :param pagenumber: Page number of the scaling rule list. The initial value and default value are both 1.
+        :type int
+        :param pagesize: When querying by page, this parameter indicates the number of lines per page. Maximum value: 50;
+            default value: 50.
+        
+        :rtype: list
+        :return: A list of  :class:`footmark.ess.rule`
+    
+        """
+
+        rules = []
+        params = {}
+        if scaling_group_id:
+            self.build_list_params(params, scaling_group_id, 'ScalingGroupId')
+        if scaling_rule_ids:
+            for i in range(len(scaling_rule_ids)):
+                if i < 10 and scaling_rule_ids[i]:
+                    self.build_list_params(params, scaling_rule_ids[i], 'ScalingRuleId'+ bytes(i+1))
+        if scaling_rule_names:
+            for i in range(len(scaling_rule_names)):
+                if i < 10 and scaling_rule_names[i]:
+                    self.build_list_params(params, scaling_rule_names[i], 'ScalingRuleName'+bytes(i+1))
+        if scaling_rule_aris:
+            for i in range(len(scaling_rule_aris)):
+                if i < 10 and scaling_rule_aris[i]:
+                    self.build_list_params(params, scaling_rule_aris[i], 'ScalingRuleAri'+bytes(i+1))
+
+        self.build_list_params(params, pagesize, 'PageSize')
+
+        pNum = pagenumber
+        if not pNum:
+            pNum = 1
+        while True:
+            self.build_list_params(params, pNum, 'PageNumber')
+            rule_list = self.get_list('DescribeScalingRules', params, ['ScalingRules', ScalingRule])
+            # API DescribeScalingRules has not 'ScalingRules' when there is no any rule.
+            if not isinstance(rule_list, list):
+                return rules
+
+            for rule in rule_list:
+                rules.append(rule)
+            if pagenumber or len(rule_list) < pagesize:
+                break
+            pNum += 1
+
+        return rules
+
+    def modify_rule(self, scaling_rule_id, adjustment_type=None, adjustment_value=None, name=None, cooldown=None):
+        """
+        Modifies the attributes of a scaling rule.
+
+        :type str
+        :param scaling_rule_id: ID of a scaling rule.
+        :type str
+        :param adjustment_type: Adjustment mode of a scaling rule. Optional values:
+            - QuantityChangeInCapacity: It is used to increase or decrease a specified number of ECS instances.
+            - PercentChangeInCapacity: It is used to increase or decrease a specified proportion of ECS instances.
+            - TotalCapacity: It is used to adjust the quantity of ECS instances in the current scaling group to a specified value.
+        :type int
+        :param adjustment_value: Adjusted value of a scaling rule. Value range:
+            - QuantityChangeInCapacity: (0, 100] U (-100, 0]
+            - PercentChangeInCapacity: [0, 10000] U [-10000, 0]
+            - TotalCapacity: [0, 100]
+        :type str
+        :param name: Name shown for the scaling rule, which is a string containing 2 to 40 English or Chinese characters.
+                It must begin with a number, a letter (case-insensitive) or a Chinese character and can contain numbers, “_”, “-“ or “.”.
+                The account name in the same scaling group is unique in the same region.
+                If this parameter value is not specified, the default value is ScalingRuleId.
+        :type int
+        :param cooldown: Cool-down time of a scaling rule. Value range: [0, 86,400], in seconds. The default value is empty.
+        
+        :rtype: bool
+        :return: The result of modifying.
+
+        """
+
+        params = {}
+
+        self.build_list_params(params, scaling_rule_id, 'ScalingRuleId')
+
+        if adjustment_type:
+            self.build_list_params(params, adjustment_type, 'AdjustmentType')
+
+        if adjustment_value is not None:
+            self.build_list_params(params, adjustment_value, 'AdjustmentValue')
+
+        if name:
+            self.build_list_params(params, name, 'ScalingRuleName')
+        if cooldown is not None:
+            self.build_list_params(params, cooldown, 'Cooldown')
+
+        return self.get_status('ModifyScalingRule', params)
+
+    def terminate_rule(self, scaling_rule_id):
+        """
+        Deletes a specified scaling rule.
+
+        :type str
+        :param scaling_rule_id: ID of a scaling rule.
+        
+        :rtype: bool
+        :return: The result of deleting.
+
+        """
+
+        params = {}
+
+        self.build_list_params(params, scaling_rule_id, 'ScalingRuleId')
+
+        return self.get_status('DeleteScalingRule', params)
+
+    def create_scheduled_task(self, scaling_rule_ari, launch_time, name=None, description=None, launch_expiration_time=None,
+                              recurrence_type=None, recurrence_value=None, recurrence_end_time=None, task_enabled=None):
+        """
+        This operation creates a scheduled task according to input parameters.
+
+        You can create up to 20 scheduled tasks.
+        
+        When the trigger of a scheduled task fails because a scaling activity in a scaling group is in progress or the scaling group is disabled, 
+        the scheduled task is automatically retried within the LaunchExpirationTime; otherwise, the scheduled trigger task is abandoned.
+        
+        If multiple tasks are scheduled at similar times to execute the rule of the same group, the earliest task triggers the scaling activity first, 
+        and other tasks make attempts to execute the rule within their Launch Expiration Time because a scaling group executes only one scaling activity at a time. 
+        If another scheduled task is still making triggering attempts within its Launch Expiration Time after the scaling activity is finished, 
+        the scaling rule is executed and the corresponding scaling activity is triggered.
+
+        :type str
+        :param scaling_rule_ari: The unique identifier of the scaling rule.
+        :type str
+        :param launch_time: Time point at which the scheduled task is triggered.
+            The date format follows the ISO8601 standard and uses UTC time. It is in the format of YYYY-MM-DDThh:mmZ.
+            If RecurrenceType is specified, the time point specified by this attribute is the default time point at which the circle is executed. 
+            If RecurrenceType is not specified, the task is executed once on the designated date and time.
+            A time point 90 days after creation or modification cannot be entered.
+        :type str
+        :param name: Display name of the scheduled task, which must be 2-40 characters (English or Chinese) long. 
+            It must begin with a number, an upper/lower-case letter or a Chinese character and may contain numbers, “_”, “-“ or “.”.
+            The account name is unique in the same region.
+            If this parameter is not specified, the default value ScheduledScalingTaskId is used.
+        :type str
+        :param description: Description of the scheduled task, which is 2-200 characters (English or Chinese) long.
+        :type int
+        :param launch_expiration_time: Time period within which the failed scheduled task is retried. The default value is 600s. Value range: [0, 21600]
+        :type str
+        :param recurrence_type: Type of the scheduled task to be repeated. Optional values:
+            - Daily: Recurrence interval by day for a scheduled task.
+            - Weekly: Recurrence interval by week for a scheduled task.
+            - Monthly: Recurrence interval by month for a scheduled task.
+            RecurrenceType, RecurrenceValue and RecurrenceEndTime must be specified at the same time.
+        :type str
+        :param recurrence_value: Value of the scheduled task to be repeated.
+            - Daily: Only one value in the range [1,31] can be filled.
+            - Weekly: Multiple values can be filled. The values of Sunday to Saturday are 0 to 6 in sequence. Multiple values shall be separated by a comma “,”.
+            - Monthly: In the format of A-B. The value range of A and B is 1 to 31, and the B value must be greater than the A value.
+            RecurrenceType, RecurrenceValue and RecurrenceEndTime must be specified at the same tiem.
+        :type str
+        :param recurrence_end_time: End time of the scheduled task to be repeated.
+            The date format follows the ISO8601 standard and uses UTC time. It is in the format of YYYY-MM-DDThh:mmZ.
+            A time point 90 days after creation or modification cannot be entered.
+            RecurrenceType, RecurrenceValue and RecurrenceEndTime must be specified at the same time.
+        :type bool
+        :param task_enabled: Whether to enable the scheduled task.
+            - When the parameter is set to true, the task is enabled.
+            - When the parameter is set to false, the task is disabled.
+            The default value is true.
+        
+        :rtype: object
+        :return: Returns a <footmark.ess.ScheduledTask> object.
+
+        """
+
+        params = {}
+
+        self.build_list_params(params, scaling_rule_ari, 'ScheduledAction')
+        self.build_list_params(params, launch_time, 'LaunchTime')
+
+        if name:
+            self.build_list_params(params, name, 'ScheduledTaskName')
+        if description:
+            self.build_list_params(params, description, 'Description')
+        if launch_expiration_time is not None:
+            self.build_list_params(params, launch_expiration_time, 'LaunchExpirationTime')
+        if recurrence_type:
+            self.build_list_params(params, recurrence_type, 'RecurrenceType')
+        if recurrence_value:
+            self.build_list_params(params, recurrence_value, 'RecurrenceValue')
+        if recurrence_end_time:
+            self.build_list_params(params, recurrence_end_time, 'RecurrenceEndTime')
+        if task_enabled is True or task_enabled is None:
+            self.build_list_params(params, True, 'TaskEnabled')
+
+        result = self.get_object('CreateScheduledTask', params, ResultSet)
+        return self.describe_scheduled_tasks(scheduled_task_ids=[result.scheduled_task_id])[0]
+
+    def describe_scheduled_tasks(self, scheduled_task_ids=None, scheduled_task_names=None, scaling_rule_aris=None,
+                                 pagenumber=None, pagesize=50):
+        """
+        Queries information of a scheduled task.
+
+        You can use the Scaling Rule Ari to query the relevant scheduled task.
+        
+        :type list
+        :parameter scheduled_task_ids: ID of the scheduled task. You can enter at most 20 IDs.
+        :type list
+        :parameter scheduled_task_names: Display name of the schedules task. You can enter at most 20 display names.
+        :type list
+        :parameter scaling_rule_aris: Unique identifier of a scaling rule. A maximum of 20 values can be entered.
+        :type int
+        :parameter pagenumber: Page number of the scaling scheduled task list. The initial value and default value are both 1.
+        :type int
+        :parameter pagesize: When querying by page, this parameter indicates the number of lines per page. Maximum value: 50; default value: 50.
+        
+        :rtype: list
+        :return: A list of  :class:`footmark.ess.ScheduledTask`
+    
+        """
+
+        tasks = []
+        params = {}
+
+        if scheduled_task_ids:
+            for i in range(len(scheduled_task_ids)):
+                if i < 20 and scheduled_task_ids[i]:
+                    self.build_list_params(params, scheduled_task_ids[i], 'ScheduledTaskId'+ bytes(i+1))
+        if scheduled_task_names:
+            for i in range(len(scheduled_task_names)):
+                if i < 20 and scheduled_task_names[i]:
+                    self.build_list_params(params, scheduled_task_names[i], 'ScheduledTaskName'+ bytes(i+1))
+        if scaling_rule_aris:
+            for i in range(len(scaling_rule_aris)):
+                if i < 10 and scaling_rule_aris[i]:
+                    self.build_list_params(params, scaling_rule_aris[i], 'ScheduledAction'+ bytes(i+1))
+
+        self.build_list_params(params, pagesize, 'PageSize')
+
+        pNum = pagenumber
+        if not pNum:
+            pNum = 1
+        while True:
+            self.build_list_params(params, pNum, 'PageNumber')
+            task_list = self.get_list('DescribeScheduledTasks', params, ['ScheduledTasks', ScheduledTask])
+
+            for rule in task_list:
+                tasks.append(rule)
+            if pagenumber or len(task_list) < pagesize:
+                break
+            pNum += 1
+
+        return tasks
+
+    def modify_scheduled_task(self, scheduled_task_id, scaling_rule_ari=None, launch_time=None, name=None, description=None,
+                              launch_expiration_time=None, recurrence_type=None, recurrence_value=None, recurrence_end_time=None, task_enabled=None):
+        """
+        Modifies the attributes of a scheduled task.
+
+        :type str
+        :param scheduled_task_id: ID of the scheduled task.
+        :type str
+        :param scaling_rule_ari: The unique identifier of the scaling rule.
+        :type str
+        :param launch_time: Time point at which the scheduled task is triggered.
+            The date format follows the ISO8601 standard and uses UTC time. It is in the format of YYYY-MM-DDThh:mmZ.
+            If RecurrenceType is specified, the time point specified by this attribute is the default time point at which the circle is executed. 
+            If RecurrenceType is not specified, the task is executed once on the designated date and time.
+            A time point 90 days after creation or modification cannot be entered.
+        :type str
+        :param name: Display name of the scheduled task, which must be 2-40 characters (English or Chinese) long. 
+            It must begin with a number, an upper/lower-case letter or a Chinese character and may contain numbers, “_”, “-“ or “.”.
+            The account name is unique in the same region.
+            If this parameter is not specified, the default value ScheduledScalingTaskId is used.
+        :type str
+        :param description: Description of the scheduled task, which is 2-200 characters (English or Chinese) long.
+        :type int
+        :param launch_expiration_time: Time period within which the failed scheduled task is retried. The default value is 600s. Value range: [0, 21600]
+        :type str
+        :param recurrence_type: Type of the scheduled task to be repeated. Optional values:
+            - Daily: Recurrence interval by day for a scheduled task.
+            - Weekly: Recurrence interval by week for a scheduled task.
+            - Monthly: Recurrence interval by month for a scheduled task.
+            RecurrenceType, RecurrenceValue and RecurrenceEndTime must be specified at the same time.
+        :type str
+        :param recurrence_value: Value of the scheduled task to be repeated.
+            - Daily: Only one value in the range [1,31] can be filled.
+            - Weekly: Multiple values can be filled. The values of Sunday to Saturday are 0 to 6 in sequence. Multiple values shall be separated by a comma “,”.
+            - Monthly: In the format of A-B. The value range of A and B is 1 to 31, and the B value must be greater than the A value.
+            RecurrenceType, RecurrenceValue and RecurrenceEndTime must be specified at the same tiem.
+        :type str
+        :param recurrence_end_time: End time of the scheduled task to be repeated.
+            The date format follows the ISO8601 standard and uses UTC time. It is in the format of YYYY-MM-DDThh:mmZ.
+            A time point 90 days after creation or modification cannot be entered.
+            RecurrenceType, RecurrenceValue and RecurrenceEndTime must be specified at the same time.
+        :type bool
+        :param task_enabled: Whether to enable the scheduled task.
+            - When the parameter is set to true, the task is enabled.
+            - When the parameter is set to false, the task is disabled.
+            The default value is true.
+        
+        :rtype: object
+        :return: Returns a <footmark.ess.ScheduledTask> object.
+
+        """
+
+        params = {}
+
+        self.build_list_params(params, scheduled_task_id, 'ScheduledTaskId')
+        if scaling_rule_ari:
+            self.build_list_params(params, scaling_rule_ari, 'ScalingRuleAri')
+        if launch_time:
+            self.build_list_params(params, launch_time, 'LaunchTime')
+        if name:
+            self.build_list_params(params, name, 'ScheduledTaskName')
+        if description:
+            self.build_list_params(params, description, 'Description')
+        if launch_expiration_time is not None:
+            self.build_list_params(params, launch_expiration_time, 'LaunchExpirationTime')
+        if recurrence_type:
+            self.build_list_params(params, recurrence_type, 'RecurrenceType')
+        if recurrence_value:
+            self.build_list_params(params, recurrence_value, 'RecurrenceValue')
+        if recurrence_end_time:
+            self.build_list_params(params, recurrence_end_time, 'RecurrenceEndTime')
+        if task_enabled is True or task_enabled is None:
+            self.build_list_params(params, True, 'TaskEnabled')
+
+        return self.get_status('ModifyScheduledTask', params)
+
+    def terminate_scheduled_task(self, scheduled_task_id):
+        """
+        Deletes a specified scheduled task.
+
+        :type str
+        :param scheduled_task_id: ID of the scheduled task.
+        
+        :rtype: bool
+        :return: The result of deleting.
+
+        """
+
+        params = {}
+
+        self.build_list_params(params, scheduled_task_id, 'ScheduledTaskId')
+
+        return self.get_status('DeleteScheduledTask', params)
 
     def wait_for_instances_status(self, scaling_group_id, instance_ids, status, activity_id=None, delay=DefaultWaitForInterval, timeout=DefaultTimeOut):
         """

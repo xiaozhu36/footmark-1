@@ -129,6 +129,7 @@ class ACSQueryConnection(ACSAuthConnection):
             markers = ["", ResultSet]
 
         result_set = ResultSet
+        # For get_object
         if not markers[0] and markers[1] is not ResultSet:
             result_set = markers[1](connection)
 

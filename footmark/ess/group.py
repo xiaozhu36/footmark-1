@@ -4,13 +4,13 @@ Represents an ECS Instance
 from footmark.ess.essobject import TaggedESSObject
 
 
-class Group(TaggedESSObject):
+class ScalingGroup(TaggedESSObject):
     """
     Represents an scaling configuration.
     """
 
     def __init__(self, connection=None):
-        super(Group, self).__init__(connection)
+        super(ScalingGroup, self).__init__(connection)
         self.tags = {}
 
     def __repr__(self):
